@@ -24,9 +24,11 @@ from database_layer.postgres import (
     IntegrityError,
     NotFoundError,
     fetch_one,
+    set_rls_context,
     transaction,
 )
 from ml.ml_engine import FraudCheckResult, fraud_detector
+from security import security_validator
 from services.audit_service import audit_service
 
 logger = logging.getLogger(__name__)
@@ -77,6 +79,18 @@ class TransferService:
         if sender_account_id == receiver_account_id:
             raise ValueError("Sender and receiver accounts must be different.")
 
+        # Rate limiting: Maximum 30 transfers per minute per customer to prevent rapid drain attacks
+        allowed, retry_after = security_validator.check_rate_limit(
+            f"transfer_customer_{authenticated_customer_id}",
+            max_requests=30,
+            window_seconds=60,
+        )
+        if not allowed:
+            raise DatabaseError(f"Transfer rate limit exceeded. Please wait {retry_after} seconds.")
+
+        # Sanitize description against XSS and control chars
+        clean_desc = security_validator.sanitize_text(description, max_len=200)
+
         # 3. Generate or validate idempotency key
         idem_uuid = str(idempotency_key) if idempotency_key else str(uuid.uuid4())
 
@@ -103,7 +117,7 @@ class TransferService:
                     sender_account_id=sender_account_id,
                     receiver_account_id=receiver_account_id,
                     amount=transfer_amount,
-                    description=description,
+                    description=clean_desc,
                     idempotency_key=idem_uuid,
                     ip_address=ip_address,
                     device_info=device_info,

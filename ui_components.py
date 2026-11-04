@@ -17,9 +17,14 @@ from services.auth_service import AuthUser
 
 
 def inject_custom_styles():
-    """Inject modern fintech navy and clean blue styling into Streamlit."""
+    """Inject modern fintech navy styling and client-side security headers."""
     st.markdown(
         """
+        <meta http-equiv="X-Frame-Options" content="DENY">
+        <meta http-equiv="X-Content-Type-Options" content="nosniff">
+        <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https:; img-src 'self' data: https:;">
+        
         <style>
         /* Base typography & palette */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');

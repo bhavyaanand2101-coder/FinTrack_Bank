@@ -60,6 +60,17 @@ class DuplicateIdempotencyError(DatabaseError):
         self.transaction_record = transaction_record
 
 
+def set_rls_context(conn: PgConnection, customer_id: Optional[int] = None, role: Optional[str] = "CUSTOMER") -> None:
+    """
+    Set PostgreSQL Row Level Security (RLS) session variables.
+    Enforces engine-level isolation: queries executed under this connection
+    cannot read or modify accounts or transactions belonging to another customer.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT set_config('app.current_customer_id', %s, false);", (str(customer_id) if customer_id else "",))
+        cur.execute("SELECT set_config('app.current_user_role', %s, false);", (str(role) if role else "CUSTOMER",))
+
+
 # ============================================================================
 # Transaction Context Manager
 # ============================================================================

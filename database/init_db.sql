@@ -331,3 +331,54 @@ JOIN customers c ON a.customer_id = c.customer_id
 JOIN accounts ra ON t.receiver_account_id = ra.account_id
 JOIN customers rc ON ra.customer_id = rc.customer_id;
 
+-- ============================================================================
+-- ROW LEVEL SECURITY (RLS) POLICIES
+-- ============================================================================
+ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE accounts FORCE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions FORCE ROW LEVEL SECURITY;
+ALTER TABLE ledger_entries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ledger_entries FORCE ROW LEVEL SECURITY;
+ALTER TABLE loans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE loans FORCE ROW LEVEL SECURITY;
+ALTER TABLE fraud_alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fraud_alerts FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS p_accounts_isolation ON accounts;
+CREATE POLICY p_accounts_isolation ON accounts
+FOR ALL
+USING (
+    current_setting('app.current_user_role', true) = 'ADMIN'
+    OR customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+    OR current_setting('app.current_customer_id', true) IS NULL
+    OR current_setting('app.current_customer_id', true) = ''
+);
+
+DROP POLICY IF EXISTS p_transactions_isolation ON transactions;
+CREATE POLICY p_transactions_isolation ON transactions
+FOR ALL
+USING (
+    current_setting('app.current_user_role', true) = 'ADMIN'
+    OR sender_account_id IN (
+        SELECT account_id FROM accounts 
+        WHERE customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+    )
+    OR receiver_account_id IN (
+        SELECT account_id FROM accounts 
+        WHERE customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+    )
+    OR current_setting('app.current_customer_id', true) IS NULL
+    OR current_setting('app.current_customer_id', true) = ''
+);
+
+DROP POLICY IF EXISTS p_loans_isolation ON loans;
+CREATE POLICY p_loans_isolation ON loans
+FOR ALL
+USING (
+    current_setting('app.current_user_role', true) = 'ADMIN'
+    OR customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+    OR current_setting('app.current_customer_id', true) IS NULL
+    OR current_setting('app.current_customer_id', true) = ''
+);
+

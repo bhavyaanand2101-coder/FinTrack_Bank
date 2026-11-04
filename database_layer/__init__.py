@@ -17,6 +17,7 @@ from database_layer.postgres import (
     InsufficientFundsError,
     AccountFrozenError,
     DuplicateIdempotencyError,
+    set_rls_context,
 )
 from database_layer.mongodb import (
     get_mongo_client,
@@ -44,6 +45,7 @@ __all__ = [
     "InsufficientFundsError",
     "AccountFrozenError",
     "DuplicateIdempotencyError",
+    "set_rls_context",
     "get_mongo_client",
     "get_security_collection",
     "check_mongo_health",

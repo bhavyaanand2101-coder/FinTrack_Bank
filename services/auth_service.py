@@ -17,6 +17,7 @@ from argon2.exceptions import VerifyMismatchError, VerificationError
 
 from config.settings import settings
 from database_layer.postgres import DatabaseError, fetch_one, transaction
+from security import security_validator
 from services.audit_service import audit_service
 
 logger = logging.getLogger(__name__)
@@ -211,10 +212,10 @@ class AuthService:
         Returns:
             Tuple of (customer_id, user_id, account_id)
         """
-        clean_name = full_name.strip()
-        clean_email = email.strip().lower()
-        clean_phone = phone.strip()
-        clean_username = username.strip().lower()
+        clean_name = security_validator.sanitize_text(full_name, max_len=100)
+        clean_email = security_validator.validate_email(email)
+        clean_phone = security_validator.sanitize_text(phone, max_len=20)
+        clean_username = security_validator.validate_username(username)
 
         if not clean_name:
             raise ValueError("Full name is required.")

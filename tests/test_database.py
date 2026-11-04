@@ -97,3 +97,32 @@ def test_foreign_key_and_check_constraints():
             """
         )
 
+
+def test_row_level_security_enforcement(db_conn):
+    from database_layer.postgres import set_rls_context
+
+    with db_conn.cursor() as cur:
+        # Switch to non-superuser application role to enforce RLS
+        cur.execute("SET ROLE fintrack_app;")
+        try:
+            # 1. Enforce Customer 1 RLS context
+            set_rls_context(db_conn, customer_id=1, role="CUSTOMER")
+
+            # Querying accounts for Customer 2 under Customer 1 RLS must return empty set
+            cur.execute("SELECT account_id FROM accounts WHERE customer_id = 2;")
+            rows = cur.fetchall()
+            assert len(rows) == 0, "RLS failed to block cross-customer account query"
+
+            # Querying accounts for Customer 1 returns Customer 1's own accounts
+            cur.execute("SELECT account_id FROM accounts WHERE customer_id = 1;")
+            own_rows = cur.fetchall()
+            assert len(own_rows) >= 1
+
+            # 2. Switch to ADMIN RLS context
+            set_rls_context(db_conn, customer_id=None, role="ADMIN")
+            cur.execute("SELECT account_id FROM accounts WHERE customer_id = 2;")
+            admin_rows = cur.fetchall()
+            assert len(admin_rows) >= 1, "Admin should be able to see all accounts"
+        finally:
+            cur.execute("RESET ROLE;")
+
