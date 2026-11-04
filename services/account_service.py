@@ -169,6 +169,35 @@ class AccountService:
             raise NotFoundError(f"Summary for account #{account_id} not found.")
         return summary
 
+    @staticmethod
+    def toggle_account_freeze(account_id: int, freeze: bool, admin_user_id: int) -> bool:
+        """Freeze or unfreeze an account with audit outbox record."""
+        from database_layer.postgres import transaction
+        from services.audit_service import audit_service
+
+        with transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE accounts SET is_frozen = %s, updated_at = CURRENT_TIMESTAMP WHERE account_id = %s RETURNING customer_id;",
+                    (freeze, account_id),
+                )
+                row = cur.fetchone()
+                if not row:
+                    raise NotFoundError(f"Account #{account_id} not found.")
+                cust_id = row[0]
+
+            audit_service.record_outbox_event(
+                "ACCOUNT_FROZEN" if freeze else "ACCOUNT_UNFROZEN",
+                {
+                    "account_id": account_id,
+                    "customer_id": cust_id,
+                    "admin_user_id": admin_user_id,
+                    "is_frozen": freeze,
+                },
+                conn=conn,
+            )
+        return True
+
 
 account_service = AccountService()
 

@@ -139,6 +139,60 @@ with col_right:
 
 st.divider()
 
+# Account Freeze / Unfreeze Management Console
+st.subheader("🛡️ Customer Account Controls & Freeze Management")
+st.caption("Inspect and manage account lockouts for fraud prevention.")
+
+all_accounts = fetch_all("SELECT * FROM View_Account_Summary ORDER BY account_id ASC;")
+if all_accounts:
+    acc_filter = st.text_input("Filter by Customer Name or Account ID", placeholder="Search...", key="acc_search")
+    filtered = all_accounts
+    if acc_filter.strip():
+        term = acc_filter.strip().lower()
+        filtered = [
+            a for a in all_accounts 
+            if term in str(a["account_id"]) or term in a["customer_name"].lower() or term in a["customer_email"].lower()
+        ]
+
+    for acc in filtered:
+        status_text = "FROZEN ❄️" if acc["is_frozen"] else "ACTIVE 🟢"
+        with st.expander(f"Account #{acc['account_id']} – {acc['customer_name']} ({acc['account_type']}) | Status: {status_text} | Balance: ₹{float(acc['balance']):,.2f}"):
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.write(f"**Customer:** {acc['customer_name']} (ID: #{acc['customer_id']})")
+                st.write(f"**Email:** {acc['customer_email']}")
+                st.write(f"**Created:** {acc['created_at'].strftime('%Y-%m-%d')}")
+            with c2:
+                st.write(f"**Account Type:** {acc['account_type']}")
+                st.write(f"**Current Balance:** ₹{float(acc['balance']):,.2f} {acc['currency']}")
+                st.write(f"**Total Debits:** ₹{float(acc['total_outgoing_amount']):,.2f}")
+            with c3:
+                st.write(f"**Total Credits:** ₹{float(acc['total_incoming_amount']):,.2f}")
+                st.write(f"**Total Transactions:** {acc['total_transactions_count']}")
+                st.write(f"**Is Frozen:** `{acc['is_frozen']}`")
+
+            col_btn, _ = st.columns([1, 2])
+            with col_btn:
+                from services.account_service import account_service
+                if acc["is_frozen"]:
+                    if st.button(f"🔓 Unfreeze Account #{acc['account_id']}", key=f"unfr_{acc['account_id']}", type="primary"):
+                        try:
+                            account_service.toggle_account_freeze(acc["account_id"], freeze=False, admin_user_id=user.user_id)
+                            st.success(f"Account #{acc['account_id']} has been unfrozen.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error unfreezing: {e}")
+                else:
+                    if st.button(f"❄️ Freeze Account #{acc['account_id']}", key=f"frz_{acc['account_id']}", type="secondary"):
+                        try:
+                            account_service.toggle_account_freeze(acc["account_id"], freeze=True, admin_user_id=user.user_id)
+                            st.warning(f"Account #{acc['account_id']} is now frozen.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error freezing: {e}")
+
+st.divider()
+
 # System Infrastructure & Outbox Health
 st.subheader("⚙️ System Infrastructure & Transactional Outbox State")
 outbox_stats = fetch_one(

@@ -152,3 +152,16 @@ def query_audit_logs(
         logger.error("Error querying MongoDB security logs: %s", exc)
         return []
 
+
+def count_audit_logs(filter_criteria: Optional[Dict[str, Any]] = None) -> int:
+    """Return the total document count matching filter_criteria for pagination."""
+    coll = get_security_collection()
+    if coll is None:
+        return 0
+    try:
+        query = filter_criteria or {}
+        return coll.count_documents(query)
+    except Exception as exc:
+        logger.error("Error counting MongoDB security logs: %s", exc)
+        return 0
+

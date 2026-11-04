@@ -92,6 +92,8 @@ class AuditWorker:
     def process_event(self, event: Dict[str, Any]) -> bool:
         """
         Deliver a single claimed event to MongoDB.
+        Normalizes document structure to match Section 8 specification:
+        {event_id, action, customer_id, account_id, transaction_id, timestamp, ip_address, device_info, metadata}
         """
         event_id = str(event["event_id"])
         payload = event["payload"]
@@ -101,12 +103,40 @@ class AuditWorker:
             except Exception:
                 payload = {"raw": payload}
 
-        payload["event_id"] = event_id
-        if "action" not in payload:
-            payload["action"] = event.get("event_type", "UNKNOWN")
+        action = payload.get("action") or event.get("event_type", "UNKNOWN")
+        customer_id = payload.get("customer_id")
+        account_id = payload.get("account_id") or payload.get("sender_account_id") or payload.get("primary_account_id")
+        transaction_id = payload.get("transaction_id")
+        timestamp = payload.get("timestamp") or datetime.datetime.now(datetime.timezone.utc).isoformat()
+        ip_address = payload.get("ip_address", "127.0.0.1")
+        device_info = payload.get("device_info", "Desktop Client")
+
+        # Collect extra fields into metadata
+        standard_keys = {
+            "event_id", "action", "customer_id", "account_id", "sender_account_id",
+            "primary_account_id", "transaction_id", "timestamp", "ip_address", "device_info", "metadata"
+        }
+        metadata = payload.get("metadata", {})
+        if not isinstance(metadata, dict):
+            metadata = {"raw": metadata}
+        for k, v in payload.items():
+            if k not in standard_keys:
+                metadata[k] = v
+
+        mongo_doc = {
+            "event_id": event_id,
+            "action": action,
+            "customer_id": customer_id,
+            "account_id": account_id,
+            "transaction_id": transaction_id,
+            "timestamp": timestamp,
+            "ip_address": ip_address,
+            "device_info": device_info,
+            "metadata": metadata,
+        }
 
         # Deliver to MongoDB
-        delivered = insert_audit_document(payload)
+        delivered = insert_audit_document(mongo_doc)
 
         current_retry = event.get("retry_count", 0)
 

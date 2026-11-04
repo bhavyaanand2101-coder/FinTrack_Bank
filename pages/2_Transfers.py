@@ -88,6 +88,25 @@ with col_transfer:
             "Money will NOT be debited until approved by bank administration."
         )
 
+    # Transfer Confirmation Summary Card
+    projected_bal = max(Decimal("0.00"), sender_acc["balance"] - Decimal(str(amount_input)))
+    recipient_name = receiver_acc["full_name"] if receiver_acc else "Unverified"
+    st.markdown(
+        f"""
+        <div class="metric-card" style="background-color: #F8FAFC; border: 1px solid #CBD5E1; margin: 12px 0;">
+            <div class="metric-title" style="color: #1E3A8A;">📋 Pre-Authorization Summary</div>
+            <div style="font-size: 13px; color: #334155; line-height: 1.8;">
+                <div><strong>Source Account:</strong> #{sender_account_id} ({sender_acc['account_type']})</div>
+                <div><strong>Recipient:</strong> {recipient_name} (#{receiver_account_input})</div>
+                <div><strong>Transfer Amount:</strong> <span style="font-size: 15px; font-weight: 700; color: #0F172A;">₹{amount_input:,.2f}</span></div>
+                <div><strong>Projected Balance:</strong> ₹{float(projected_bal):,.2f}</div>
+                <div><strong>Estimated Fee:</strong> ₹0.00 (Zero Surcharge)</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     st.markdown(f"**Transaction Reference (Idempotency Key):** `{st.session_state['transfer_idempotency_key']}`")
 
     submit_transfer = st.button("Authorize & Transfer Funds", type="primary", use_container_width=True)

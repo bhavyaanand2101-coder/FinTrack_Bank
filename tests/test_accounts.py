@@ -73,3 +73,15 @@ def test_account_summary_metrics_view():
     assert "total_outgoing_amount" in summary
     assert "total_transactions_count" in summary
 
+
+def test_toggle_account_freeze():
+    # Freeze account 1002
+    account_service.toggle_account_freeze(account_id=1002, freeze=True, admin_user_id=1)
+    acc = account_service.get_account_by_id(1002)
+    assert acc["is_frozen"] is True
+
+    # Unfreeze account 1002
+    account_service.toggle_account_freeze(account_id=1002, freeze=False, admin_user_id=1)
+    acc_unfrozen = account_service.get_account_by_id(1002)
+    assert acc_unfrozen["is_frozen"] is False
+

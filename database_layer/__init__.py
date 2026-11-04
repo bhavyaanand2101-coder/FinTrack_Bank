@@ -24,6 +24,7 @@ from database_layer.mongodb import (
     check_mongo_health,
     insert_audit_document,
     query_audit_logs,
+    count_audit_logs,
 )
 
 __all__ = [
@@ -48,5 +49,6 @@ __all__ = [
     "check_mongo_health",
     "insert_audit_document",
     "query_audit_logs",
+    "count_audit_logs",
 ]
 
