@@ -116,3 +116,4 @@ else:
 
         with st.expander(f"[{ts_str}] {log.get('action', 'LOG')} – Event ID: {log.get('event_id', 'N/A')}"):
             st.json(log)
+

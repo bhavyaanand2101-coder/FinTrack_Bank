@@ -216,3 +216,4 @@ class FraudService:
 
 
 fraud_service = FraudService()
+

@@ -112,3 +112,4 @@ def test_login_throttling():
     # 6th attempt should trigger rate limiting / lockout
     with pytest.raises(DatabaseError, match="Too many failed login attempts"):
         auth_service.login(test_user, "WrongPassword!")
+

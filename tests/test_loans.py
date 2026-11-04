@@ -94,3 +94,4 @@ def test_loan_application_rejection():
         decision="REJECTED",
     )
     assert review_res["status"] == "REJECTED"
+

@@ -90,3 +90,4 @@ def test_opposite_direction_concurrent_transfers_no_deadlock():
 
     assert res1["status"] == "SUCCESS"
     assert res2["status"] == "SUCCESS"
+

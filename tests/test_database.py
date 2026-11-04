@@ -96,3 +96,4 @@ def test_foreign_key_and_check_constraints():
             VALUES (1, 'INVALID_TYPE', 100.00);
             """
         )
+

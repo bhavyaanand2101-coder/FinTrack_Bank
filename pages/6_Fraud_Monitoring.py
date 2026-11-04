@@ -99,3 +99,4 @@ with tab_history:
             "Reviewed At": pd.to_datetime(df_fa["alert_reviewed_at"]).dt.strftime("%Y-%m-%d %H:%M").fillna("Pending"),
         })
         st.dataframe(df_fa_disp, use_container_width=True, hide_index=True)
+

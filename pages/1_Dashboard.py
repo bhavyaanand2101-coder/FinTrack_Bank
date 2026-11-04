@@ -179,3 +179,4 @@ with tab_spending:
             use_container_width=True,
             hide_index=True,
         )
+

@@ -446,3 +446,4 @@ All 49 tests run against an isolated test database (`fintrack_test`), preserving
 - **Academic Simulator**: This application is built for university DBMS and AI/ML demonstration. It is not connected to real-money payment networks (NPCI, UPI, SWIFT).
 - **Single Currency**: Balances and transactions default to INR (`₹`).
 - **Simulated Credit Score**: Credit scores are validated within the standard 300–900 CIBIL range via algorithmic tiers rather than an external credit bureau API.
+

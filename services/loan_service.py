@@ -267,3 +267,4 @@ class LoanService:
 
 
 loan_service = LoanService()
+

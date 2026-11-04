@@ -161,3 +161,4 @@ with s3:
     st.metric("Outbox: Delivered to MongoDB", outbox_stats["delivered_events"] or 0)
 with s4:
     st.metric("Outbox: Failed Delivery", outbox_stats["failed_events"] or 0)
+

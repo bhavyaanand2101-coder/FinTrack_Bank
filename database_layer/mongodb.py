@@ -151,3 +151,4 @@ def query_audit_logs(
     except Exception as exc:
         logger.error("Error querying MongoDB security logs: %s", exc)
         return []
+

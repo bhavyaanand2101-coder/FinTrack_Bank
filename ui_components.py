@@ -192,3 +192,4 @@ def require_auth(role: Optional[str] = None) -> AuthUser:
         st.stop()
 
     return user
+

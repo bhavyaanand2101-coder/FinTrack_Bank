@@ -87,3 +87,4 @@ def test_invalid_input_handling():
 
     with pytest.raises(ValueError, match="Invalid transfer amount"):
         fraud_detector.evaluate_transfer("invalid_amount_abc", history)
+

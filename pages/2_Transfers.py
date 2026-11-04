@@ -164,3 +164,4 @@ with col_info:
         """,
         unsafe_allow_html=True,
     )
+

@@ -93,3 +93,4 @@ else:
         "Reviewer": df_loans["reviewer_username"].fillna("Awaiting review"),
     })
     st.dataframe(df_disp, use_container_width=True, hide_index=True)
+

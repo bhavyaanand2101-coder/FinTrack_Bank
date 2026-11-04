@@ -72,3 +72,4 @@ def test_account_summary_metrics_view():
     assert "total_incoming_amount" in summary
     assert "total_outgoing_amount" in summary
     assert "total_transactions_count" in summary
+
