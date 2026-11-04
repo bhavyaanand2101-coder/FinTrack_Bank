@@ -418,17 +418,49 @@ python workers/audit_worker.py --once
 
 ## 13. Running the Automated Test Suite
 
-FinTrack includes a comprehensive automated test suite with **49 tests** covering transactions, concurrency, idempotency, fraud detection, and NoSQL synchronization:
+FinTrack includes a comprehensive automated test suite with **58 tests** covering transactions, concurrency, idempotency, fraud detection, Row Level Security (RLS), input sanitization, and NoSQL synchronization:
 
 ```bash
 pytest tests/ --cov=services --cov=database_layer --cov=ml --cov=workers -v
 ```
 
-All 49 tests run against an isolated test database (`fintrack_test`), preserving development records.
+All 58 tests run against an isolated test database (`fintrack_test`), preserving development records.
 
 ---
 
-## 14. Documented Academic Demo Credentials
+## 14. Enterprise Application Security Hardening
+
+FinTrack enforces rigorous defense-in-depth across the application, database, and network tiers:
+
+1. **PostgreSQL Row Level Security (RLS)**:
+   - Enabled with `FORCE ROW LEVEL SECURITY` on `accounts`, `transactions`, `ledger_entries`, `loans`, and `fraud_alerts`.
+   - Engine-level policies verify `current_setting('app.current_user_role') = 'ADMIN'` or `customer_id = current_setting('app.current_customer_id')`.
+   - Even if backend application checks were bypassed, PostgreSQL prevents unauthorized cross-customer record access.
+2. **Never Trust the Frontend & IDOR Protection**:
+   - Customer-supplied account numbers are never trusted for ownership.
+   - All balance, transfer, and loan queries verify that the queried resources belong strictly to the authenticated customer ID stored in the server session.
+3. **Sliding-Window Rate Limiting**:
+   - Brute-force login protection: locks accounts after 5 failed attempts for 300 seconds.
+   - Transfer rate limiting: limits transfer frequency to prevent automated drain attacks.
+4. **Input Sanitization & Injection Defense**:
+   - Strict parameterized SQL queries (`%s` binding) everywhere; no dynamic SQL string concatenation.
+   - String inputs are stripped of ASCII control characters and HTML entities are escaped to prevent Stored XSS.
+5. **CORS & HTTP Security Headers**:
+   - CORS locked down in `.streamlit/config.toml` (`enableCORS = false`).
+   - XSRF protection enabled (`enableXsrfProtection = true`).
+   - Browser headers: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Content-Security-Policy`.
+6. **Production Debug Mode Disabled**:
+   - `showErrorDetails = false` in `.streamlit/config.toml` ensures stack traces and internal database error codes are never exposed to clients.
+7. **File Upload Security & Magic Byte Verification**:
+   - Maximum upload size capped at 5MB.
+   - Strict extension whitelisting (`.pdf`, `.png`, `.jpg`).
+   - True file type verification using binary magic byte headers (`%PDF-`, PNG, JPEG) preventing polyglot and MIME-confusion exploits.
+8. **Comprehensive Administrator Action Audit Logging**:
+   - Every administrative action (loan approvals/rejections, fraud reviews, account freeze/unfreeze) is logged with the reviewer's ID, timestamp, and client metadata to PostgreSQL `audit_outbox` and relayed to MongoDB.
+
+---
+
+## 15. Documented Academic Demo Credentials
 
 | Role | Username | Password | Default Accounts | Initial Balance | Highlights |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -442,7 +474,7 @@ All 49 tests run against an isolated test database (`fintrack_test`), preserving
 
 ---
 
-## 15. Known Academic Limitations
+## 16. Known Academic Limitations
 - **Academic Simulator**: This application is built for university DBMS and AI/ML demonstration. It is not connected to real-money payment networks (NPCI, UPI, SWIFT).
 - **Single Currency**: Balances and transactions default to INR (`₹`).
 - **Simulated Credit Score**: Credit scores are validated within the standard 300–900 CIBIL range via algorithmic tiers rather than an external credit bureau API.
