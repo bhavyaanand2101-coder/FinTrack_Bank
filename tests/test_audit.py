@@ -39,11 +39,14 @@ def test_worker_delivery_to_mongodb():
     )
 
     worker = AuditWorker()
-    processed = worker.run_once()
-    assert processed >= 1
+    worker.run_once()
 
-    # Check PostgreSQL outbox status is updated to DELIVERED
+    # Verify our specific event was delivered (or run one more cycle if previous batch filled the limit)
     row = fetch_one("SELECT status, last_error FROM audit_outbox WHERE event_id = %s;", (ev_uuid,))
+    if row and row["status"] != "DELIVERED":
+        worker.run_once()
+        row = fetch_one("SELECT status, last_error FROM audit_outbox WHERE event_id = %s;", (ev_uuid,))
+
     assert row["status"] == "DELIVERED"
     assert row["last_error"] is None
 

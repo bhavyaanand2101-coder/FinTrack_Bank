@@ -1,4 +1,4 @@
-"""Enable Row Level Security (RLS) on financial and account tables
+"""Enable Row Level Security (RLS) on all financial, customer, and audit tables
 
 Revision ID: 0002_enable_rls
 Revises: 0001_initial_schema
@@ -16,17 +16,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # 1. Enable RLS on core tables with FORCE to ensure table owner is also subjected to policies
-    op.execute("ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE accounts FORCE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE transactions FORCE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE ledger_entries ENABLE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE ledger_entries FORCE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE loans ENABLE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE loans FORCE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE fraud_alerts ENABLE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE fraud_alerts FORCE ROW LEVEL SECURITY;")
+    # 1. Enable RLS and FORCE on all tables
+    tables = [
+        'customers', 'users', 'accounts', 'transactions',
+        'ledger_entries', 'loans', 'fraud_alerts', 'audit_outbox'
+    ]
+    for tbl in tables:
+        op.execute(f"ALTER TABLE {tbl} ENABLE ROW LEVEL SECURITY;")
+        op.execute(f"ALTER TABLE {tbl} FORCE ROW LEVEL SECURITY;")
 
     # 2. Accounts Policy: Customers access own accounts; Admins access all
     op.execute("""
@@ -36,12 +33,13 @@ def upgrade() -> None:
     USING (
         current_setting('app.current_user_role', true) = 'ADMIN'
         OR customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+        OR current_setting('app.current_user_role', true) = 'SYSTEM'
         OR current_setting('app.current_customer_id', true) IS NULL
         OR current_setting('app.current_customer_id', true) = ''
     );
     """)
 
-    # 3. Transactions Policy: Sender or receiver customer matches current customer
+    # 3. Transactions Policy: Sender or receiver matches current customer
     op.execute("""
     DROP POLICY IF EXISTS p_transactions_isolation ON transactions;
     CREATE POLICY p_transactions_isolation ON transactions
@@ -56,6 +54,7 @@ def upgrade() -> None:
             SELECT account_id FROM accounts 
             WHERE customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
         )
+        OR current_setting('app.current_user_role', true) = 'SYSTEM'
         OR current_setting('app.current_customer_id', true) IS NULL
         OR current_setting('app.current_customer_id', true) = ''
     );
@@ -69,6 +68,82 @@ def upgrade() -> None:
     USING (
         current_setting('app.current_user_role', true) = 'ADMIN'
         OR customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+        OR current_setting('app.current_user_role', true) = 'SYSTEM'
+        OR current_setting('app.current_customer_id', true) IS NULL
+        OR current_setting('app.current_customer_id', true) = ''
+    );
+    """)
+
+    # 5. Ledger Entries Policy
+    op.execute("""
+    DROP POLICY IF EXISTS p_ledger_isolation ON ledger_entries;
+    CREATE POLICY p_ledger_isolation ON ledger_entries
+    FOR ALL
+    USING (
+        current_setting('app.current_user_role', true) = 'ADMIN'
+        OR account_id IN (
+            SELECT account_id FROM accounts 
+            WHERE customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+        )
+        OR current_setting('app.current_user_role', true) = 'SYSTEM'
+        OR current_setting('app.current_customer_id', true) IS NULL
+        OR current_setting('app.current_customer_id', true) = ''
+    );
+    """)
+
+    # 6. Fraud Alerts Policy
+    op.execute("""
+    DROP POLICY IF EXISTS p_fraud_alerts_isolation ON fraud_alerts;
+    CREATE POLICY p_fraud_alerts_isolation ON fraud_alerts
+    FOR ALL
+    USING (
+        current_setting('app.current_user_role', true) = 'ADMIN'
+        OR account_id IN (
+            SELECT account_id FROM accounts 
+            WHERE customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+        )
+        OR current_setting('app.current_user_role', true) = 'SYSTEM'
+        OR current_setting('app.current_customer_id', true) IS NULL
+        OR current_setting('app.current_customer_id', true) = ''
+    );
+    """)
+
+    # 7. Customers Policy
+    op.execute("""
+    DROP POLICY IF EXISTS p_customers_isolation ON customers;
+    CREATE POLICY p_customers_isolation ON customers
+    FOR ALL
+    USING (
+        current_setting('app.current_user_role', true) = 'ADMIN'
+        OR customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+        OR current_setting('app.current_user_role', true) = 'SYSTEM'
+        OR current_setting('app.current_customer_id', true) IS NULL
+        OR current_setting('app.current_customer_id', true) = ''
+    );
+    """)
+
+    # 8. Users Policy
+    op.execute("""
+    DROP POLICY IF EXISTS p_users_isolation ON users;
+    CREATE POLICY p_users_isolation ON users
+    FOR ALL
+    USING (
+        current_setting('app.current_user_role', true) = 'ADMIN'
+        OR customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+        OR current_setting('app.current_user_role', true) = 'SYSTEM'
+        OR current_setting('app.current_customer_id', true) IS NULL
+        OR current_setting('app.current_customer_id', true) = ''
+    );
+    """)
+
+    # 9. Audit Outbox Policy
+    op.execute("""
+    DROP POLICY IF EXISTS p_audit_outbox_isolation ON audit_outbox;
+    CREATE POLICY p_audit_outbox_isolation ON audit_outbox
+    FOR ALL
+    USING (
+        current_setting('app.current_user_role', true) = 'ADMIN'
+        OR current_setting('app.current_user_role', true) = 'SYSTEM'
         OR current_setting('app.current_customer_id', true) IS NULL
         OR current_setting('app.current_customer_id', true) = ''
     );
@@ -76,12 +151,10 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP POLICY IF EXISTS p_loans_isolation ON loans;")
-    op.execute("DROP POLICY IF EXISTS p_transactions_isolation ON transactions;")
-    op.execute("DROP POLICY IF EXISTS p_accounts_isolation ON accounts;")
-
-    op.execute("ALTER TABLE fraud_alerts DISABLE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE loans DISABLE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE ledger_entries DISABLE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;")
-    op.execute("ALTER TABLE accounts DISABLE ROW LEVEL SECURITY;")
+    tables = [
+        'audit_outbox', 'users', 'customers', 'fraud_alerts',
+        'ledger_entries', 'loans', 'transactions', 'accounts'
+    ]
+    for tbl in tables:
+        op.execute(f"DROP POLICY IF EXISTS p_{tbl}_isolation ON {tbl};")
+        op.execute(f"ALTER TABLE {tbl} DISABLE ROW LEVEL SECURITY;")

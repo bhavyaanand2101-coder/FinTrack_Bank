@@ -27,7 +27,6 @@ from database_layer.postgres import (
     set_rls_context,
     transaction,
 )
-from ml.ml_engine import FraudCheckResult, fraud_detector
 from security import security_validator
 from services.audit_service import audit_service
 
@@ -195,24 +194,14 @@ class TransferService:
                         f"but requested transfer is INR {amount:,.2f}."
                     )
 
-                # 6. Fetch historical successful transfers for ML anomaly detection
-                cur.execute(
-                    """
-                    SELECT amount 
-                    FROM transactions 
-                    WHERE sender_account_id = %s AND status = 'SUCCESS'
-                    ORDER BY transaction_date DESC 
-                    LIMIT 50;
-                    """,
-                    (sender_account_id,),
-                )
-                history = [row[0] for row in cur.fetchall()]
+                # 6. Rule-based Fraud Check (Deterministic Fixed Business Rule - No AI/ML)
+                # Any transfer >= settings.FRAUD_THRESHOLD (INR 10,000.00) is held for manual review.
+                is_flagged = amount >= settings.FRAUD_THRESHOLD
 
-                # 7. Evaluate Fraud / Anomaly
-                fraud_result: FraudCheckResult = fraud_detector.evaluate_transfer(amount, history)
+                if is_flagged:
+                    risk_score = 1.00
+                    reason = f"Deterministic threshold exceeded: Transfer amount of INR {amount:,.2f} meets or exceeds review threshold of INR {settings.FRAUD_THRESHOLD:,.2f}."
 
-                # 8. Branch based on fraud evaluation
-                if fraud_result.is_fraud:
                     # A. Record FLAGGED transaction WITHOUT moving money
                     cur.execute(
                         """
@@ -231,7 +220,7 @@ class TransferService:
                         VALUES (%s, %s, %s, %s, 'OPEN')
                         RETURNING alert_id;
                         """,
-                        (tx_id, sender_account_id, fraud_result.risk_score, fraud_result.reason),
+                        (tx_id, sender_account_id, risk_score, reason),
                     )
                     alert_id = cur.fetchone()[0]
 
@@ -244,23 +233,23 @@ class TransferService:
                             "sender_account_id": sender_account_id,
                             "receiver_account_id": receiver_account_id,
                             "amount": float(amount),
-                            "risk_score": fraud_result.risk_score,
-                            "reason": fraud_result.reason,
-                            "method": fraud_result.method,
+                            "risk_score": risk_score,
+                            "reason": reason,
+                            "method": "DETERMINISTIC_RULE_THRESHOLD",
                             "ip_address": ip_address,
                             "device_info": device_info,
                         },
                         conn=conn,
                     )
 
-                    logger.warning("Transfer FLAGGED for compliance review: tx #%d (Risk Score: %.2f)", tx_id, fraud_result.risk_score)
+                    logger.warning("Transfer FLAGGED for compliance review: tx #%d (Amount: INR %s)", tx_id, amount)
                     return {
                         "status": "FLAGGED",
                         "transaction_id": tx_id,
                         "alert_id": alert_id,
                         "amount": amount,
-                        "risk_score": fraud_result.risk_score,
-                        "reason": fraud_result.reason,
+                        "risk_score": risk_score,
+                        "reason": reason,
                         "message": "Transfer flagged for security compliance review. Balances remain unchanged pending administrator approval.",
                     }
 

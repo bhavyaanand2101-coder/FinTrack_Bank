@@ -10,6 +10,7 @@ import json
 import logging
 import signal
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -54,9 +55,13 @@ class AuditWorker:
         self.poll_interval = poll_interval
         self._running = True
 
-        # Signal handlers for clean shutdown
-        signal.signal(signal.SIGINT, self._handle_shutdown)
-        signal.signal(signal.SIGTERM, self._handle_shutdown)
+        # Signal handlers for clean shutdown (only when running in main thread)
+        try:
+            if threading.current_thread() is threading.main_thread():
+                signal.signal(signal.SIGINT, self._handle_shutdown)
+                signal.signal(signal.SIGTERM, self._handle_shutdown)
+        except (ValueError, AttributeError):
+            pass
 
     def _handle_shutdown(self, signum, frame):
         logger.info("Shutdown signal received (%s). Finishing active batch and exiting...", signum)

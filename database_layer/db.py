@@ -44,28 +44,10 @@ def _create_raw_pool() -> pool.ThreadedConnectionPool:
     return raw_pool
 
 
-# Streamlit-compatible pool acquisition with fallback
 def get_connection_pool() -> pool.ThreadedConnectionPool:
     """
-    Get or initialize the thread-safe connection pool.
-    Uses st.cache_resource if running inside a Streamlit script context,
-    otherwise uses a thread-safe singleton.
+    Get or initialize the thread-safe connection pool using a singleton lock.
     """
-    import sys
-    # Check if streamlit is currently executing a script before importing get_script_run_ctx
-    if "streamlit" in sys.modules:
-        try:
-            import streamlit as st
-            from streamlit.runtime.scriptrunner import get_script_run_ctx
-            ctx = get_script_run_ctx(suppress_warning=True)
-            if ctx is not None:
-                @st.cache_resource(show_spinner=False)
-                def _get_st_pool():
-                    return _create_raw_pool()
-                return _get_st_pool()
-        except Exception:
-            pass
-
     global _GLOBAL_POOL
     with _POOL_LOCK:
         if _GLOBAL_POOL is None or _GLOBAL_POOL.closed:

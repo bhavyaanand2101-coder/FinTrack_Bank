@@ -118,11 +118,24 @@ def test_row_level_security_enforcement(db_conn):
             own_rows = cur.fetchall()
             assert len(own_rows) >= 1
 
+            # Loans isolation: Customer 1 cannot see Customer 2's loans
+            cur.execute("SELECT loan_id FROM loans WHERE customer_id = 2;")
+            loan_rows = cur.fetchall()
+            assert len(loan_rows) == 0, "RLS failed to block cross-customer loan query"
+
+            # Customers isolation: Customer 1 cannot see Customer 2's profile
+            cur.execute("SELECT customer_id FROM customers WHERE customer_id = 2;")
+            cust_rows = cur.fetchall()
+            assert len(cust_rows) == 0, "RLS failed to block cross-customer profile query"
+
             # 2. Switch to ADMIN RLS context
             set_rls_context(db_conn, customer_id=None, role="ADMIN")
             cur.execute("SELECT account_id FROM accounts WHERE customer_id = 2;")
             admin_rows = cur.fetchall()
             assert len(admin_rows) >= 1, "Admin should be able to see all accounts"
+
+            cur.execute("SELECT customer_id FROM customers WHERE customer_id = 2;")
+            assert len(cur.fetchall()) >= 1, "Admin should be able to see all customers"
         finally:
             cur.execute("RESET ROLE;")
 

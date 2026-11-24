@@ -37,11 +37,9 @@ class Settings:
     DB_POOL_MAX: int = int(os.getenv("DB_POOL_MAX", "10"))
     DB_TIMEOUT_SECONDS: int = int(os.getenv("DB_TIMEOUT_SECONDS", "10"))
 
-    # Fraud Detection Rules & ML
-    # Strict Decimal for currency amounts
+    # Fraud Detection Deterministic Rule Threshold
+    # Strict Decimal for currency amounts (Any transfer >= FRAUD_THRESHOLD triggers compliance hold)
     FRAUD_THRESHOLD: Decimal = Decimal(os.getenv("FRAUD_THRESHOLD", "10000.00"))
-    Z_SCORE_THRESHOLD: float = float(os.getenv("Z_SCORE_THRESHOLD", "3.0"))
-    MIN_ML_SAMPLES: int = int(os.getenv("MIN_ML_SAMPLES", "5"))
 
     # Security & Session
     SESSION_TIMEOUT_MINUTES: int = int(os.getenv("SESSION_TIMEOUT_MINUTES", "30"))

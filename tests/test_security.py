@@ -106,3 +106,106 @@ def test_idor_protection_transfer_source():
             receiver_account_id=1001,
             amount=Decimal("100.00"),
         )
+
+
+def test_webhook_signature_verification():
+    secret = "super-secret-webhook-key-9988"
+    payload = b'{"event":"PAYMENT_RECEIVED","amount":5000}'
+
+    # 1. Valid signature
+    sig = security_validator.generate_webhook_signature(payload, secret)
+    assert security_validator.verify_webhook_signature(payload, sig, secret) is True
+
+    # 2. Tampered payload
+    tampered_payload = b'{"event":"PAYMENT_RECEIVED","amount":999999}'
+    assert security_validator.verify_webhook_signature(tampered_payload, sig, secret) is False
+
+    # 3. Wrong secret
+    assert security_validator.verify_webhook_signature(payload, sig, "wrong-secret") is False
+
+    # 4. Replay attack with expired timestamp (> 300s)
+    old_timestamp = int(time.time()) - 600
+    expired_sig = security_validator.generate_webhook_signature(payload, secret, timestamp=old_timestamp)
+    assert security_validator.verify_webhook_signature(payload, expired_sig, secret, tolerance_seconds=300) is False
+
+
+def test_command_injection_guard():
+    # Safe text passes
+    security_validator.assert_no_command_execution("Regular safe transfer note")
+    security_validator.assert_no_command_execution("Rent payment for Nov 2026")
+
+    # Command injection vectors are blocked
+    dangerous_inputs = [
+        "transfer; rm -rf /",
+        "transfer && cat /etc/passwd",
+        "transfer | ls -la",
+        "transfer `whoami`",
+        "transfer $(id)",
+        "eval('malicious()')",
+        "exec('bad()')",
+        "system('reboot')",
+    ]
+    for bad_input in dangerous_inputs:
+        with pytest.raises(ValueError, match="Dangerous input token detected"):
+            security_validator.assert_no_command_execution(bad_input)
+
+
+def test_filename_sanitization():
+    assert security_validator.sanitize_filename("../../../etc/passwd") == "passwd"
+    assert security_validator.sanitize_filename("..\\..\\windows\\system32\\cmd.exe") == "cmd.exe"
+    assert security_validator.sanitize_filename("invoice 2026 #1.pdf") == "invoice_2026__1.pdf"
+
+
+def test_private_storage_service(tmp_path):
+    from services.storage_service import PrivateStorageService
+
+    storage = PrivateStorageService(storage_dir=tmp_path)
+    file_bytes = b"%PDF-1.4 sample secure document content"
+    filename = "loan_doc.pdf"
+
+    # Store file
+    res = storage.store_file(
+        file_bytes=file_bytes,
+        original_filename=filename,
+        owner_customer_id=1,
+        category="loan_document"
+    )
+    assert res["is_private"] is True
+    file_id = res["file_id"]
+
+    # Retrieve by authorized owner
+    retrieved, name = storage.retrieve_file(file_id, requesting_customer_id=1, file_owner_id=1)
+    assert retrieved == file_bytes
+
+    # Retrieve by admin
+    retrieved_admin, _ = storage.retrieve_file(file_id, is_admin=True)
+    assert retrieved_admin == file_bytes
+
+    # Unauthorized access (IDOR on storage)
+    with pytest.raises(DatabaseError, match="Unauthorized: You do not have permission"):
+        storage.retrieve_file(file_id, requesting_customer_id=2, file_owner_id=1)
+
+
+def test_idor_extended_queries():
+    """
+    IDOR Test: Customer 1 must be blocked when attempting to fetch
+    recent transactions, running balance, spending analysis, or summary
+    for account 1003 (owned by Customer 2).
+    """
+    # 1. Recent transactions
+    with pytest.raises(DatabaseError, match="Unauthorized: You do not own"):
+        account_service.get_account_recent_transactions(account_id=1003, customer_id=1)
+
+    # 2. Running balance
+    with pytest.raises(DatabaseError, match="Unauthorized: You do not own"):
+        account_service.get_running_balance(account_id=1003, customer_id=1)
+
+    # 3. Monthly spending
+    with pytest.raises(DatabaseError, match="Unauthorized: You do not own"):
+        account_service.get_monthly_spending_analysis(account_id=1003, customer_id=1)
+
+    # 4. Summary metrics
+    with pytest.raises(DatabaseError, match="Unauthorized: You do not own"):
+        account_service.get_account_summary_metrics(account_id=1003, customer_id=1)
+
+

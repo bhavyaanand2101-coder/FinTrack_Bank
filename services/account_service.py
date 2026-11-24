@@ -80,10 +80,18 @@ class AccountService:
         return bool(fetch_one(query, (account_id, customer_id)))
 
     @staticmethod
-    def get_account_recent_transactions(account_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_account_recent_transactions(
+        account_id: int, 
+        limit: int = 10,
+        customer_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Fetch recent transactions (incoming and outgoing) for a specific account.
+        Enforces strict IDOR protection if customer_id is supplied.
         """
+        if customer_id is not None and not AccountService.verify_account_ownership(account_id, customer_id):
+            raise DatabaseError(f"Unauthorized: You do not own account #{account_id}.")
+
         query = """
             SELECT 
                 t.transaction_id,
@@ -113,10 +121,18 @@ class AccountService:
         return fetch_all(query, (account_id, account_id, account_id, limit))
 
     @staticmethod
-    def get_running_balance(account_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_running_balance(
+        account_id: int, 
+        limit: int = 20,
+        customer_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Calculate running account balance using Advanced SQL Query 1 (Window Functions).
+        Enforces strict IDOR protection if customer_id is supplied.
         """
+        if customer_id is not None and not AccountService.verify_account_ownership(account_id, customer_id):
+            raise DatabaseError(f"Unauthorized: You do not own account #{account_id}.")
+
         query = """
             SELECT 
                 entry_id,
@@ -134,10 +150,17 @@ class AccountService:
         return fetch_all(query, (account_id, limit))
 
     @staticmethod
-    def get_monthly_spending_analysis(account_id: int) -> List[Dict[str, Any]]:
+    def get_monthly_spending_analysis(
+        account_id: int,
+        customer_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         """
         Calculate monthly outgoing spending using Advanced SQL Query 2 (Common Table Expression).
+        Enforces strict IDOR protection if customer_id is supplied.
         """
+        if customer_id is not None and not AccountService.verify_account_ownership(account_id, customer_id):
+            raise DatabaseError(f"Unauthorized: You do not own account #{account_id}.")
+
         query = """
             WITH monthly_outgoing AS (
                 SELECT 
@@ -159,10 +182,17 @@ class AccountService:
         return fetch_all(query, (account_id,))
 
     @staticmethod
-    def get_account_summary_metrics(account_id: int) -> Dict[str, Any]:
+    def get_account_summary_metrics(
+        account_id: int,
+        customer_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
         """
         Retrieve account summary metrics from View_Account_Summary.
+        Enforces strict IDOR protection if customer_id is supplied.
         """
+        if customer_id is not None and not AccountService.verify_account_ownership(account_id, customer_id):
+            raise DatabaseError(f"Unauthorized: You do not own account #{account_id}.")
+
         query = "SELECT * FROM View_Account_Summary WHERE account_id = %s;"
         summary = fetch_one(query, (account_id,))
         if not summary:

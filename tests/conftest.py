@@ -38,7 +38,10 @@ def pytest_unconfigure(config):
 
 @pytest.fixture(autouse=True)
 def reset_db_state():
-    """Ensure clean connection pool state before each test."""
+    """Ensure clean connection pool and isolated rate-limit state before each test."""
+    from security import _RATE_LIMITS, _RATE_LIMIT_LOCK
+    with _RATE_LIMIT_LOCK:
+        _RATE_LIMITS.clear()
     yield
     # Any post-test cleanup if necessary
 

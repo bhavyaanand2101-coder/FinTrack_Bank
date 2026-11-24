@@ -1,17 +1,18 @@
 # FinTrack – Smart Digital Banking & Loan Management System
 
-FinTrack is an academic banking simulator and loan management system built with **Python**, **Streamlit**, **PostgreSQL**, and **MongoDB Atlas / Local NoSQL**.
+FinTrack is an enterprise-grade banking and loan management full-stack Database Management System (DBMS) built with **React (Vite + Tailwind CSS)**, **Python FastAPI**, **PostgreSQL 16**, and **MongoDB NoSQL**.
 
-The system demonstrates relational database engineering, financial ACID transactions, double-entry bookkeeping, deadlock prevention via deterministic lock ordering, statistical AI/ML anomaly detection, and the **Transactional Outbox Pattern** for asynchronous NoSQL security audit log delivery.
+The system demonstrates advanced relational database engineering, ACID transactions, double-entry bookkeeping, deadlock prevention via deterministic lock ordering, deterministic fixed-rule fraud holds, and the **Transactional Outbox Pattern** for asynchronous NoSQL security audit log delivery.
 
 ---
 
 ## 1. Project Introduction & Objectives
 
-FinTrack simulates modern retail banking workflows:
-- **Customer Portal**: Registration, secure authentication, account balance and running ledger tracking, immediate fund transfers, loan applications, and monthly spending analysis.
-- **Administrator Console**: System metrics, loan approvals/rejections, fraud & compliance reviews for flagged transfers, and inspection of MongoDB security logs.
-- **Enterprise-Grade Constraints**: Zero floating-point math (Python `Decimal` and PostgreSQL `NUMERIC(15,2)`), idempotency deduplication keys, and ledger immutability triggers.
+FinTrack models core retail banking workflows with strict database-level guarantees:
+- **Customer Portal**: Registration, Argon2id authentication, real-time account balances, running balance calculation via window functions, monthly spending breakdowns via CTEs, immediate fund transfers with idempotency, loan applications, and personal profile security.
+- **Administrator Console**: Bank-wide KPIs, customer account management (including account freeze/unfreeze toggles), loan application approvals/rejections, review of rule-flagged transfers, inspection of immutable MongoDB security audit logs, and analytical SQL reports.
+- **Enterprise-Grade Database Constraints**: Zero floating-point math (Python `Decimal` and PostgreSQL `NUMERIC(15,2)`), idempotency deduplication keys (`UUID`), ledger immutability triggers, overdraft prevention triggers, and Row Level Security (RLS).
+- **Deterministic Fraud Holds (Zero AI/ML)**: Transfers meeting or exceeding ₹10,000.00 are automatically placed on compliance hold as `FLAGGED` with zero money movement until approved by bank administration.
 
 ---
 
@@ -19,16 +20,16 @@ FinTrack simulates modern retail banking workflows:
 
 | Layer | Component | Description |
 | :--- | :--- | :--- |
-| **Frontend UI** | Streamlit | Responsive multipage dashboard with modern fintech styling |
-| **Backend Runtime** | Python 3.14 / 3.13 | High-performance Python backend services |
-| **Primary Database** | PostgreSQL 16 | Relational core for customer, account, transaction & ledger data |
-| **NoSQL Database** | MongoDB Atlas / Local | Immutable append-only audit & security event logs |
-| **Database Driver** | `psycopg2-binary` | Thread-safe connection pooling with context managers |
-| **NoSQL Driver** | `pymongo` | Connection pooling and idempotent document ingestion |
-| **AI / ML Engine** | Scikit-Learn & NumPy | Statistical Z-score anomaly detection with rule fallbacks |
-| **Security & Auth** | `argon2-cffi` | Argon2id memory-hard password hashing |
-| **Database Migrations**| Alembic & SQLAlchemy | Versioned database schema migrations |
-| **Automated Testing** | Pytest & Pytest-Cov | Comprehensive test suite covering concurrency, fraud & ACID |
+| **Frontend UI** | React 18, Vite, Tailwind CSS | High-performance single-page application with responsive fintech UI |
+| **Frontend Routing & Charts** | React Router 7, Recharts | Declarative client routing and dynamic SVG charts for financial metrics |
+| **Backend REST API** | Python FastAPI & Uvicorn | Asynchronous RESTful API framework with automatic OpenAPI docs |
+| **Validation & Security** | Pydantic v2, PyJWT, Argon2id | Request payload validation, Bearer token sessions, memory-hard password hashing |
+| **Primary Database** | PostgreSQL 16 | Relational core for customers, accounts, transactions, loans, and ledger |
+| **NoSQL Audit Database** | MongoDB Community / Atlas | Immutable append-only audit & security event logs |
+| **Database Driver** | `psycopg2-binary` | Thread-safe connection pooling with context-managed transactions |
+| **NoSQL Driver** | `pymongo` | Resilient document ingestion with unique `event_id` index |
+| **Database Migrations** | Alembic & SQLAlchemy | Versioned database schema migrations |
+| **Automated Testing** | Pytest (Backend), Vitest (Frontend) | Comprehensive test suite covering concurrency, ACID, APIs, and UI |
 
 ---
 
@@ -36,55 +37,53 @@ FinTrack simulates modern retail banking workflows:
 
 ```mermaid
 flowchart TD
-    Client["Streamlit Multipage Web App"]
-    AuthSvc["Auth Service (Argon2id)"]
+    Client["React Frontend (Vite + Tailwind CSS)"]
+    API["FastAPI REST Backend (Uvicorn :8000)"]
+    AuthSvc["Auth Service (Argon2id + JWT)"]
     TxSvc["Transfer Service (ACID + Locks)"]
-    ML["ML Engine (Z-Score & Rules)"]
-    LoanSvc["Loan Service (Credit Model)"]
+    LoanSvc["Loan Service (Deterministic Credit Model)"]
+    Worker["Audit Worker Daemon (SELECT FOR UPDATE SKIP LOCKED)"]
     
-    subgraph PostgreSQL ["PostgreSQL Relational DB"]
-        Acc["accounts (SELECT FOR UPDATE)"]
-        Tx["transactions"]
-        Ledger["ledger_entries (Double-Entry)"]
+    subgraph PostgreSQL ["PostgreSQL Relational DB (:5432)"]
+        Acc["accounts (Row Level Security)"]
+        Tx["transactions (Idempotency Key)"]
+        Ledger["ledger_entries (Double-Entry Bookkeeping)"]
         Outbox["audit_outbox (Transactional Outbox)"]
+        Loans["loans (Credit Caps)"]
+        Fraud["fraud_alerts (Rule Holds)"]
         Triggers["Database Triggers & Views"]
     end
     
-    subgraph AsyncWorker ["Background Outbox Worker"]
-        Relay["workers/audit_worker.py (SKIP LOCKED)"]
+    subgraph MongoDB ["MongoDB NoSQL (:27017)"]
+        Logs["security_logs (Append-Only Event Store)"]
     end
     
-    subgraph NoSQL ["MongoDB Atlas / Community"]
-        SecurityLogs["security_logs collection (Unique event_id)"]
-    end
-
-    Client --> AuthSvc
-    Client --> TxSvc
-    Client --> LoanSvc
-    TxSvc --> ML
-    TxSvc --> Acc
-    TxSvc --> Tx
-    TxSvc --> Ledger
-    TxSvc --> Outbox
-    Outbox -.->|Async Polling| Relay
-    Relay -->|Idempotent Delivery| SecurityLogs
+    Client -->|HTTP/REST| API
+    API --> AuthSvc
+    API --> TxSvc
+    API --> LoanSvc
+    
+    TxSvc -->|SELECT FOR UPDATE| Acc
+    TxSvc -->|Insert 1 Debit, 1 Credit| Ledger
+    TxSvc -->|Record Outbox Event| Outbox
+    
+    Worker -->|Poll Batch| Outbox
+    Worker -->|Async Idempotent Ingestion| Logs
 ```
 
 ---
 
-## 4. Entity-Relationship (ER) Diagram
+## 4. Database Schema & Relational Design (3NF)
 
 ```mermaid
 erDiagram
     customers ||--o{ users : "authenticates as"
-    customers ||--|{ accounts : "owns"
+    customers ||--o{ accounts : "owns"
     customers ||--o{ loans : "applies for"
     accounts ||--o{ transactions : "sends"
     accounts ||--o{ transactions : "receives"
-    transactions ||--|{ ledger_entries : "produces exactly 2"
-    accounts ||--o{ ledger_entries : "tracked in"
+    transactions ||--|{ ledger_entries : "produces balanced"
     transactions ||--o| fraud_alerts : "triggers"
-    accounts ||--o{ fraud_alerts : "flagged on"
     users ||--o{ loans : "reviews"
 
     customers {
@@ -92,7 +91,7 @@ erDiagram
         string full_name
         string email UK
         string phone UK
-        timestamptz created_at
+        timestamp created_at
     }
 
     users {
@@ -100,20 +99,20 @@ erDiagram
         int customer_id FK
         string username UK
         string password_hash
-        string role "CUSTOMER or ADMIN"
+        string role "CHECK ('CUSTOMER', 'ADMIN')"
         boolean is_active
-        timestamptz created_at
+        timestamp created_at
     }
 
     accounts {
         bigint account_id PK
         int customer_id FK
-        string account_type "SAVINGS or CHECKING"
+        string account_type "CHECK ('SAVINGS', 'CHECKING')"
         numeric balance "CHECK (balance >= 0.00)"
-        string currency "INR"
+        string currency
         boolean is_frozen
-        timestamptz created_at
-        timestamptz updated_at
+        timestamp created_at
+        timestamp updated_at
     }
 
     transactions {
@@ -121,19 +120,19 @@ erDiagram
         bigint sender_account_id FK
         bigint receiver_account_id FK
         numeric amount "CHECK (amount > 0.00)"
-        string status "PENDING, SUCCESS, FAILED, FLAGGED"
+        string status "CHECK ('PENDING', 'SUCCESS', 'FAILED', 'FLAGGED')"
         uuid idempotency_key UK
         text description
-        timestamptz transaction_date
+        timestamp transaction_date
     }
 
     ledger_entries {
         bigint entry_id PK
         bigint transaction_id FK
         bigint account_id FK
-        string entry_type "DEBIT or CREDIT"
+        string entry_type "CHECK ('DEBIT', 'CREDIT')"
         numeric amount "CHECK (amount > 0.00)"
-        timestamptz created_at
+        timestamp created_at
     }
 
     loans {
@@ -141,12 +140,12 @@ erDiagram
         int customer_id FK
         numeric requested_amount
         numeric annual_income
-        int credit_score
+        int credit_score "CHECK (300 to 900)"
         numeric interest_rate
-        string status "PENDING, APPROVED, REJECTED"
-        timestamptz applied_at
-        timestamptz reviewed_at
+        string status "CHECK ('PENDING', 'APPROVED', 'REJECTED')"
         int reviewed_by FK
+        timestamp applied_at
+        timestamp reviewed_at
     }
 
     fraud_alerts {
@@ -155,80 +154,56 @@ erDiagram
         bigint account_id FK
         numeric risk_score
         text reason
-        string status "OPEN, APPROVED, REJECTED"
-        timestamptz created_at
-        timestamptz reviewed_at
+        string status "CHECK ('OPEN', 'APPROVED', 'REJECTED')"
+        timestamp created_at
+        timestamp reviewed_at
     }
 
     audit_outbox {
         uuid event_id PK
         string event_type
         jsonb payload
-        string status "PENDING, PROCESSING, DELIVERED, FAILED"
+        string status "CHECK ('PENDING', 'PROCESSING', 'DELIVERED', 'FAILED')"
         int retry_count
-        timestamptz created_at
-        timestamptz processed_at
-        text last_error
+        timestamp created_at
+        timestamp processed_at
     }
 ```
 
 ---
 
-## 5. Database Normalization (Up to 3NF)
+## 5. ACID Concurrency & Deadlock Prevention
 
-1. **First Normal Form (1NF)**:
-   - All attributes contain atomic, scalar values (no multi-valued lists or nested record types).
-   - Each table possesses an explicit primary key (`customer_id`, `user_id`, `account_id`, `transaction_id`, `entry_id`, `loan_id`, `alert_id`, `event_id`).
-   - All columns have fixed data types.
-2. **Second Normal Form (2NF)**:
-   - All relations are in 1NF.
-   - All non-key attributes are fully functionally dependent on the entire primary key (no partial key dependencies).
-3. **Third Normal Form (3NF)**:
-   - All relations are in 2NF.
-   - No transitive dependencies exist. For example, customer contact information is kept strictly in `customers`, user login credentials in `users`, and financial account state in `accounts`. Transactions reference accounts by foreign key, eliminating data duplication.
+Financial transfers in FinTrack strictly implement the ACID contract:
 
----
-
-## 6. Financial ACID Properties & Concurrency Control
-
-- **Atomicity**: Fund transfers execute in a single Python-controlled database transaction. If any debit, credit, transaction record, ledger entry, or outbox write fails, the entire transaction is rolled back, leaving balances untouched.
-- **Consistency**: Database CHECK constraints (`balance >= 0.00`, `amount > 0.00`, `sender <> receiver`) and triggers guarantee that invalid states cannot be persisted.
-- **Isolation**: Row-level locking using `SELECT ... FOR UPDATE` prevents dirty reads, non-repeatable reads, and phantom reads.
-- **Durability**: Committed records are persisted to disk in PostgreSQL with WAL (Write-Ahead Logging).
-
-### Deadlock Avoidance Strategy
-When accounts $A$ and $B$ transfer money to each other simultaneously, traditional locks can deadlock ($A$ locks 1 then waits for 2; $B$ locks 2 then waits for 1).
-FinTrack enforces **Deterministic Ascending Lock Ordering**:
-```sql
-SELECT account_id, customer_id, balance, currency, is_frozen
-FROM accounts
-WHERE account_id IN (sender_id, receiver_id)
-ORDER BY account_id ASC
-FOR UPDATE;
-```
-Because both threads lock lower `account_id` first and higher `account_id` second, circular wait is mathematically eliminated.
+1. **Atomicity**: Fund transfers execute under explicit Python transaction context managers (`with transaction() as conn:`). If any check fails, changes roll back completely.
+2. **Deterministic Row Lock Ordering (Deadlock Prevention)**:
+   When transferring between accounts $A$ and $B$, both accounts are locked using `SELECT ... FOR UPDATE` in strict ascending order of their IDs:
+   ```sql
+   SELECT account_id, customer_id, balance, currency, is_frozen
+   FROM accounts
+   WHERE account_id IN (%s, %s)
+   ORDER BY account_id ASC
+   FOR UPDATE;
+   ```
+   If Transaction 1 transfers from Account 1001 to 1002 and Transaction 2 transfers from Account 1002 to 1001 simultaneously, both acquire locks in the identical order ($1001 \rightarrow 1002$), eliminating cyclic wait conditions.
+3. **Double-Entry Bookkeeping**:
+   Every successful transfer inserts exactly two immutable ledger records in the same transaction:
+   - Debit: Account $A$ debited by amount $X$.
+   - Credit: Account $B$ credited by amount $X$.
+   Sum of debits equals sum of credits ($\sum \text{Debit} = \sum \text{Credit}$).
+4. **Idempotency Deduplication**:
+   Transfers receive a unique client `UUID` idempotency key. If a retry or double-click occurs, the server retrieves and returns the committed transaction result without double-debiting.
+5. **Deterministic Rule-Based Fraud Hold**:
+   Any transfer where $\text{Amount} \ge ₹10,000.00$ is flagged immediately as `FLAGGED`. Zero money movement occurs. Only an administrator review can release the funds (atomic revalidation) or reject the transfer (void).
 
 ---
 
-## 7. Database Triggers & Views
+## 6. The 5 Advanced DBMS SQL Queries
 
-### Database Triggers
-1. **`trg_prevent_overdraft`**: Runs `BEFORE UPDATE` on `accounts`. Rejects any update attempting to set `balance < 0.00` and automatically refreshes `updated_at`.
-2. **`trg_detect_large_transfer`**: Runs `BEFORE INSERT` on `transactions`. If `amount >= 10,000.00 INR`, intercepts the status and sets it to `FLAGGED` to prevent unauthorized money movement before review.
-3. **`trg_enforce_ledger_immutability`**: Runs `BEFORE UPDATE OR DELETE` on `ledger_entries`. Throws an exception prohibiting alteration or deletion of double-entry records.
+FinTrack embeds five complex relational SQL queries powering its analytical endpoints:
 
-### Database Views
-1. **`View_Loan_Eligibility`**: Calculates debt-to-income limits (max 50% of annual income), credit score tiers, pre-approval status, and suggested interest rates (7.50% to 15.00%).
-2. **`View_Account_Summary`**: Aggregates customer account balances, incoming credit sums, outgoing debit sums, and total transaction counts.
-3. **`View_Transaction_Summary`**: Joins transactions with sender and receiver identities.
-4. **`View_Fraud_Alerts`**: Joins open and reviewed fraud alerts with counterparty information for administrator compliance consoles.
-
----
-
-## 8. Five Advanced SQL Queries
-
-### Query 1: Running Balance (Window Functions)
-Calculates running balances over chronological ledger entries:
+### Query 1: Running Account Balance (SQL Window Function)
 ```sql
 SELECT 
     entry_id,
@@ -239,13 +214,12 @@ SELECT
     SUM(CASE WHEN entry_type = 'CREDIT' THEN amount ELSE -amount END) 
         OVER (PARTITION BY account_id ORDER BY created_at ASC, entry_id ASC) AS running_balance
 FROM ledger_entries
-WHERE account_id = 1001
+WHERE account_id = %s
 ORDER BY created_at DESC, entry_id DESC
-LIMIT 10;
+LIMIT %s;
 ```
 
-### Query 2: Monthly Spending Analysis (Common Table Expression)
-Aggregates outgoing volume grouped by calendar month using a CTE:
+### Query 2: Monthly Spending Breakdown (Common Table Expression - CTE)
 ```sql
 WITH monthly_outgoing AS (
     SELECT 
@@ -254,7 +228,7 @@ WITH monthly_outgoing AS (
         SUM(amount) AS total_monthly_outgoing,
         COUNT(transaction_id) AS transfer_count
     FROM transactions
-    WHERE sender_account_id = 1001 AND status = 'SUCCESS'
+    WHERE sender_account_id = %s AND status = 'SUCCESS'
     GROUP BY sender_account_id, DATE_TRUNC('month', transaction_date)
 )
 SELECT 
@@ -265,217 +239,227 @@ FROM monthly_outgoing
 ORDER BY month_label ASC;
 ```
 
-### Query 3: Loan Eligibility (View Calculation)
-Evaluates credit tiers and debt caps:
+### Query 3: Loan Credit Assessment (SQL View)
 ```sql
-SELECT * FROM View_Loan_Eligibility WHERE customer_id = 1;
+CREATE OR REPLACE VIEW View_Loan_Eligibility AS
+SELECT 
+    l.loan_id,
+    l.customer_id,
+    c.full_name AS customer_name,
+    c.email AS customer_email,
+    l.requested_amount,
+    l.annual_income,
+    l.credit_score,
+    (l.annual_income * 0.50) AS max_eligible_loan_amount,
+    CASE 
+        WHEN l.credit_score >= 800 AND l.requested_amount <= (l.annual_income * 0.50) THEN 'PRE-APPROVED'
+        WHEN l.credit_score >= 700 AND l.requested_amount <= (l.annual_income * 0.50) THEN 'ELIGIBLE'
+        WHEN l.requested_amount > (l.annual_income * 0.50) THEN 'EXCEEDS_INCOME_LIMIT'
+        ELSE 'INELIGIBLE_LOW_CREDIT'
+    END AS eligibility_status
+FROM loans l
+JOIN customers c ON l.customer_id = c.customer_id;
 ```
 
-### Query 4: Top Five Customers by Outgoing Transfer Volume
-Uses `GROUP BY`, `SUM`, `ORDER BY`, and `LIMIT`:
+### Query 4: Top 5 Customers by Transfer Volume (Subquery + GROUP BY)
 ```sql
 SELECT 
     c.customer_id,
     c.full_name,
     c.email,
-    COUNT(t.transaction_id) AS successful_transfers_count,
-    SUM(t.amount) AS total_outgoing_volume
+    COUNT(t.transaction_id) AS total_transfers_sent,
+    COALESCE(SUM(t.amount), 0.00) AS total_amount_transferred
 FROM customers c
 JOIN accounts a ON c.customer_id = a.customer_id
 JOIN transactions t ON a.account_id = t.sender_account_id
 WHERE t.status = 'SUCCESS'
 GROUP BY c.customer_id, c.full_name, c.email
-ORDER BY total_outgoing_volume DESC
+ORDER BY total_amount_transferred DESC
 LIMIT 5;
 ```
 
-### Query 5: Dormant Accounts Without Transactions
-Identifies accounts with no transfer history using `LEFT JOIN ... IS NULL`:
+### Query 5: Dormant Account Detection (LEFT JOIN with IS NULL Filter)
 ```sql
 SELECT 
     a.account_id,
+    c.full_name AS customer_name,
+    c.email AS customer_email,
     a.account_type,
     a.balance,
-    c.customer_id,
-    c.full_name,
-    c.email
+    a.created_at
 FROM accounts a
 JOIN customers c ON a.customer_id = c.customer_id
-LEFT JOIN transactions t_send ON a.account_id = t_send.sender_account_id
-LEFT JOIN transactions t_recv ON a.account_id = t_recv.receiver_account_id
-WHERE t_send.transaction_id IS NULL AND t_recv.transaction_id IS NULL;
+LEFT JOIN transactions t 
+    ON (a.account_id = t.sender_account_id OR a.account_id = t.receiver_account_id)
+WHERE t.transaction_id IS NULL
+ORDER BY a.created_at ASC;
 ```
 
 ---
 
-## 9. AI/ML Fraud Detection Engine
+## 7. Transactional Outbox Pattern (MongoDB Audit Integration)
 
-Located in `ml/ml_engine.py`:
-- **Formula**:
-  $$Z = \frac{X - \mu}{\sigma}$$
-  Where $X$ is the current transfer amount, $\mu$ is the mean of past successful outgoing transfers, and $\sigma$ is the sample standard deviation.
-- **Cold-Start Safeguard**: If $< 5$ historical transactions exist, uses rule-based validation (flags if $\ge \text{INR } 10,000$, clears otherwise).
-- **Zero-Variance Fallback**: If $\sigma = 0$ (all past transfers identical), flags if amount $> 2\mu$ or $\ge 10,000$.
-- **Hard Rule**: Mandatory threshold of INR 10,000.00 flags transactions regardless of history.
-- **Zero Money Movement Guarantee**: Flagged transfers are recorded with `status='FLAGGED'`, zero ledger entries, and zero balance modification until administrative review.
-
----
-
-## 10. Transactional Outbox Pattern & MongoDB Integration
-
-```mermaid
-sequenceDiagram
-    participant App as Transfer Service
-    participant PG as PostgreSQL (Transactional Core)
-    participant Worker as Outbox Worker Daemon
-    participant Mongo as MongoDB Atlas (security_logs)
-
-    App->>PG: BEGIN TRANSACTION
-    App->>PG: Deduct Sender & Credit Receiver
-    App->>PG: Insert SUCCESS Transaction
-    App->>PG: Insert 2 Balanced Ledger Entries
-    App->>PG: INSERT INTO audit_outbox (status='PENDING')
-    App->>PG: COMMIT TRANSACTION
-    Note over App,PG: Financial operation complete and durable!
-
-    loop Async Polling (Every 3s)
-        Worker->>PG: SELECT ... FOR UPDATE SKIP LOCKED
-        Worker->>PG: UPDATE status='PROCESSING'
-        Worker->>Mongo: insert_one(doc) (Unique event_id index)
-        alt Mongo Success
-            Worker->>PG: UPDATE status='DELIVERED'
-        else Mongo Downtime / Error
-            Worker->>PG: UPDATE status='PENDING', retry_count++
-        end
-    end
-```
+To guarantee that MongoDB failure never invalidates or rolls back a financial transaction:
+1. Every state mutation writes an event record to `audit_outbox` inside the exact same PostgreSQL transaction as the financial operation.
+2. The background worker (`workers/audit_worker.py`) polls pending events using non-blocking row claims:
+   ```sql
+   SELECT event_id, event_type, payload
+   FROM audit_outbox
+   WHERE status = 'PENDING'
+   ORDER BY created_at ASC
+   LIMIT 100
+   FOR UPDATE SKIP LOCKED;
+   ```
+3. The worker inserts events into MongoDB's `security_logs` collection and marks the outbox record as `DELIVERED`.
+4. If MongoDB is temporarily down, PostgreSQL outbox safely buffers events with automatic retry and lease recovery.
 
 ---
 
-## 11. Installation & Setup Instructions
+## 8. REST API Endpoints Reference
+
+The FastAPI backend exposes 30 endpoints documented interactively at `/api/docs`:
+
+### Authentication (`/api/auth`)
+- `POST /api/auth/register`: Register new customer with initial deposit.
+- `POST /api/auth/login`: Authenticate and receive JWT Bearer token.
+- `GET /api/auth/me`: Retrieve current authenticated profile.
+- `POST /api/auth/logout`: Invalidate session.
+
+### Bank Accounts (`/api/accounts`)
+- `GET /api/accounts`: List accounts for authenticated customer (or all for admin).
+- `GET /api/accounts/{account_id}`: Account details with strict IDOR ownership check.
+- `GET /api/accounts/{account_id}/balance`: Real-time account balance.
+- `GET /api/accounts/{account_id}/summary`: Aggregated metrics from `View_Account_Summary`.
+- `GET /api/accounts/{account_id}/statement`: Statement including running balance and monthly CTE.
+
+### Fund Transfers (`/api/transfers`)
+- `POST /api/transfers`: Execute atomic transfer with idempotency.
+- `GET /api/transfers`: List transactions with status/search/date filters.
+- `GET /api/transfers/{transaction_id}`: Transaction details.
+- `GET /api/transfers/recipient/{account_number}`: Live recipient verification.
+
+### Personal Loans (`/api/loans`)
+- `POST /api/loans/calculate`: Instant eligibility calculator using fixed business rules.
+- `POST /api/loans`: Submit new loan application.
+- `GET /api/loans`: Customer loan history.
+- `GET /api/admin/loans`: Admin review queue for loan applications.
+- `PATCH /api/admin/loans/{loan_id}/approve`: Approve loan application.
+- `PATCH /api/admin/loans/{loan_id}/reject`: Reject loan application.
+
+### Administration & Analytics (`/api/admin`)
+- `GET /api/admin/dashboard`: System KPIs and counters.
+- `GET /api/admin/customers`: List and search customer profiles with accounts.
+- `PATCH /api/admin/accounts/{account_id}/freeze`: Freeze/unfreeze account.
+- `GET /api/admin/transactions`: Monitor all bank transactions.
+- `GET /api/admin/reports`: Advanced analytical reports (Queries 2, 4, 5).
+- `GET /api/admin/fraud-alerts`: View rule-flagged transfers.
+- `PATCH /api/admin/fraud-alerts/{alert_id}/approve`: Atomic revalidation and release.
+- `PATCH /api/admin/fraud-alerts/{alert_id}/reject`: Void transfer with zero money movement.
+- `GET /api/admin/audit-logs`: Query MongoDB security audit logs.
+- `GET /api/admin/audit-logs/{event_id}`: Inspect raw MongoDB JSON document.
+- `POST /api/admin/audit-logs/sync`: Trigger on-demand outbox sync pass.
+
+---
+
+## 9. Installation & Startup Instructions
 
 ### Prerequisites
-- Python 3.12, 3.13, or 3.14
-- PostgreSQL 14+ (Local, Supabase, or Neon.tech)
-- MongoDB (Local or MongoDB Atlas)
+- Python 3.14 (or 3.12+)
+- Node.js 18+ and npm
+- PostgreSQL 16 (port 5432)
+- MongoDB Community or Atlas (port 27017)
 
-### Step 1: Clone and Set Up Virtual Environment
+### Quick Start: Single-Command Launcher
+You can launch all services (FastAPI, React Vite, and Audit Worker) with a single command:
 ```bash
-python3 -m venv .venv
+./run.sh
+```
+
+---
+
+### 1. Backend Setup (Manual)
+```bash
+# Activate virtual environment
 source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Run database migrations
+alembic upgrade head
+
+# Start FastAPI backend server
+uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-### Step 2: Configure Environment Variables
-Copy `.env.example` to `.env` and configure your credentials:
+### 2. Frontend Setup
 ```bash
-cp .env.example .env
-```
-Example `.env`:
-```ini
-POSTGRES_URI=postgresql://postgres:postgres@localhost:5432/fintrack?sslmode=prefer
-MONGO_URI=mongodb://localhost:27017/
-MONGO_DB_NAME=fintrack_db
-DB_POOL_MIN=1
-DB_POOL_MAX=10
-FRAUD_THRESHOLD=10000.00
-Z_SCORE_THRESHOLD=3.0
-SESSION_TIMEOUT_MINUTES=30
-```
+# Navigate to frontend directory
+cd frontend
 
-### Step 3: Initialize Database Schema & Seed Data
+# Install npm packages
+npm install
+
+# Start Vite React development server
+npm run dev
+```
+The React application will be available at **`http://localhost:5173`**.
+
+### 3. Background Audit Worker Daemon
 ```bash
-# Initialize schema, triggers, and views
-psql -d fintrack -f database/init_db.sql
-
-# Load synthetic seed data
-psql -d fintrack -f database/seed_data.sql
-
-# Mark Alembic migration revision head
-alembic stamp head
-```
-
----
-
-## 12. Running the Application
-
-### Launch Streamlit Portal
-```bash
-streamlit run app.py
-```
-Open [http://localhost:8501](http://localhost:8501) in your browser.
-
-### Launch Background Audit Outbox Worker (Optional / Concurrent)
-```bash
-# Run continuous background worker
+# In a separate terminal session
+source .venv/bin/activate
 python workers/audit_worker.py --interval 3.0
-
-# Or run a single batch sync
-python workers/audit_worker.py --once
 ```
 
 ---
 
-## 13. Running the Automated Test Suite
+## 10. Demonstration Credentials
 
-FinTrack includes a comprehensive automated test suite with **58 tests** covering transactions, concurrency, idempotency, fraud detection, Row Level Security (RLS), input sanitization, and NoSQL synchronization:
+### 🛡️ Administrator Account
+| Username | Password | Role | Description |
+| :--- | :--- | :--- | :--- |
+| **`admin`** | **`AdminPassword123!`** | `ADMIN` | Full access to KPI dashboard, customer freeze controls, loan reviews, fraud approvals, and MongoDB audit logs |
 
-```bash
-pytest tests/ --cov=services --cov=database_layer --cov=ml --cov=workers -v
-```
+### 👤 Demo Customer Accounts
+*All demo customer accounts share the password:* **`Customer123!`**
 
-All 58 tests run against an isolated test database (`fintrack_test`), preserving development records.
-
----
-
-## 14. Enterprise Application Security Hardening
-
-FinTrack enforces rigorous defense-in-depth across the application, database, and network tiers:
-
-1. **PostgreSQL Row Level Security (RLS)**:
-   - Enabled with `FORCE ROW LEVEL SECURITY` on `accounts`, `transactions`, `ledger_entries`, `loans`, and `fraud_alerts`.
-   - Engine-level policies verify `current_setting('app.current_user_role') = 'ADMIN'` or `customer_id = current_setting('app.current_customer_id')`.
-   - Even if backend application checks were bypassed, PostgreSQL prevents unauthorized cross-customer record access.
-2. **Never Trust the Frontend & IDOR Protection**:
-   - Customer-supplied account numbers are never trusted for ownership.
-   - All balance, transfer, and loan queries verify that the queried resources belong strictly to the authenticated customer ID stored in the server session.
-3. **Sliding-Window Rate Limiting**:
-   - Brute-force login protection: locks accounts after 5 failed attempts for 300 seconds.
-   - Transfer rate limiting: limits transfer frequency to prevent automated drain attacks.
-4. **Input Sanitization & Injection Defense**:
-   - Strict parameterized SQL queries (`%s` binding) everywhere; no dynamic SQL string concatenation.
-   - String inputs are stripped of ASCII control characters and HTML entities are escaped to prevent Stored XSS.
-5. **CORS & HTTP Security Headers**:
-   - CORS locked down in `.streamlit/config.toml` (`enableCORS = false`).
-   - XSRF protection enabled (`enableXsrfProtection = true`).
-   - Browser headers: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Content-Security-Policy`.
-6. **Production Debug Mode Disabled**:
-   - `showErrorDetails = false` in `.streamlit/config.toml` ensures stack traces and internal database error codes are never exposed to clients.
-7. **File Upload Security & Magic Byte Verification**:
-   - Maximum upload size capped at 5MB.
-   - Strict extension whitelisting (`.pdf`, `.png`, `.jpg`).
-   - True file type verification using binary magic byte headers (`%PDF-`, PNG, JPEG) preventing polyglot and MIME-confusion exploits.
-8. **Comprehensive Administrator Action Audit Logging**:
-   - Every administrative action (loan approvals/rejections, fraud reviews, account freeze/unfreeze) is logged with the reviewer's ID, timestamp, and client metadata to PostgreSQL `audit_outbox` and relayed to MongoDB.
-
----
-
-## 15. Documented Academic Demo Credentials
-
-| Role | Username | Password | Default Accounts | Initial Balance | Highlights |
+| Username | Password | Customer Name | Account IDs | Balances | Demo Scenario |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Admin** | `admin` | `AdminPassword123!` | N/A | N/A | Full Administrative, Loan Approval & Fraud Access |
-| **Customer** | `arun_kumar` | `Customer123!` | `1001` (Savings)<br>`1002` (Checking) | ₹74,500.00<br>₹25,000.00 | Rich transfer history, approved loan |
-| **Customer** | `priya_sharma` | `Customer123!` | `1003` (Savings)<br>`1004` (Checking) | ₹112,000.00<br>₹45,000.00 | High credit score (810), approved loan |
-| **Customer** | `rohit_verma` | `Customer123!` | `1005` (Savings) | ₹18,500.00 | Rejected loan & historical rejected alert |
-| **Customer** | `ananya_singh` | `Customer123!` | `1006` (Savings)<br>`1007` (Checking) | ₹52,000.00<br>₹15,000.00 | Pending loan application (₹100,000.00) |
-| **Customer** | `vikram_patel` | `Customer123!` | `1008` (Savings) | ₹88,000.00 | Active outgoing transfers & open fraud alert |
-| **Customer** | `amit_gupta` | `Customer123!` | `1016` (Checking) | ₹5,000.00 | Zero-transaction dormant account (Query 5) |
+| **`arun_kumar`** | `Customer123!` | Arun Kumar | `1001` (Savings)<br>`1002` (Checking) | ₹74,500.00<br>₹25,000.00 | Running balance chart, routine transfers, test transfer $\ge$ ₹10,000 for fraud hold |
+| **`priya_sharma`** | `Customer123!` | Priya Sharma | `1003` (Savings)<br>`1004` (Checking) | ₹112,000.00<br>₹45,000.00 | High credit score (810, Tier A), pre-approved loan eligibility |
+| **`rohit_verma`** | `Customer123!` | Rohit Verma | `1005` (Savings) | ₹18,500.00 | Low credit score (580), rejected loan history |
+| **`ananya_singh`** | `Customer123!` | Ananya Singh | `1006` (Savings)<br>`1007` (Checking) | ₹52,000.00<br>₹15,000.00 | Pending loan application (₹100,000) awaiting admin review |
+| **`vikram_patel`** | `Customer123!` | Vikram Patel | `1008` (Savings) | ₹88,000.00 | Open flagged transfer awaiting compliance resolution |
+| **`amit_gupta`** | `Customer123!` | Amit Gupta | `1015` (Savings)<br>`1016` (Checking) | ₹38,000.00<br>₹5,000.00 | Account 1016 is dormant (Query 5 demonstration) |
 
 ---
 
-## 16. Known Academic Limitations
-- **Academic Simulator**: This application is built for university DBMS and AI/ML demonstration. It is not connected to real-money payment networks (NPCI, UPI, SWIFT).
-- **Single Currency**: Balances and transactions default to INR (`₹`).
-- **Simulated Credit Score**: Credit scores are validated within the standard 300–900 CIBIL range via algorithmic tiers rather than an external credit bureau API.
+## 11. Comprehensive Documentation Suite
 
+Detailed architectural, database, security, and deployment documentation is organized within the [`docs/`](file:///Users/bhavya/Desktop/%20/Sem_3/DBMS/Capstone/docs) directory:
+
+- [PROJECT_AUDIT.md](file:///Users/bhavya/Desktop/%20/Sem_3/DBMS/Capstone/docs/PROJECT_AUDIT.md): Complete repository audit, test findings, and technical debt remediation.
+- [ARCHITECTURE.md](file:///Users/bhavya/Desktop/%20/Sem_3/DBMS/Capstone/docs/ARCHITECTURE.md): Full-stack architectural specifications, diagrams, and data flow.
+- [DATABASE_SCHEMA.md](file:///Users/bhavya/Desktop/%20/Sem_3/DBMS/Capstone/docs/DATABASE_SCHEMA.md): Complete PostgreSQL schema, ER diagram, tables, triggers, and views.
+- [DBMS_CONCEPTS.md](file:///Users/bhavya/Desktop/%20/Sem_3/DBMS/Capstone/docs/DBMS_CONCEPTS.md): 3NF proof, ACID properties, deadlock prevention, double-entry ledger, and 5 Advanced SQL queries.
+- [API_DOCUMENTATION.md](file:///Users/bhavya/Desktop/%20/Sem_3/DBMS/Capstone/docs/API_DOCUMENTATION.md): 30 REST endpoints reference with request/response schemas.
+- [SECURITY.md](file:///Users/bhavya/Desktop/%20/Sem_3/DBMS/Capstone/docs/SECURITY.md): Threat model, Argon2id, RLS enforcement, IDOR prevention, and sanitization.
+- [TESTING.md](file:///Users/bhavya/Desktop/%20/Sem_3/DBMS/Capstone/docs/TESTING.md): Testing strategy, coverage report, and test execution guide.
+- [DEPLOYMENT.md](file:///Users/bhavya/Desktop/%20/Sem_3/DBMS/Capstone/docs/DEPLOYMENT.md): Production deployment guide, Nginx configuration, Systemd service, and environment management.
+- [PROJECT_COMPLETION.md](file:///Users/bhavya/Desktop/%20/Sem_3/DBMS/Capstone/PROJECT_COMPLETION.md): Verification matrix against all project acceptance criteria.
+
+---
+
+## 12. Automated Test Suite Execution
+
+Run backend tests with coverage:
+```bash
+./.venv/bin/pytest -v
+```
+
+Run frontend unit tests with Vitest:
+```bash
+cd frontend && npm test
+```
+All 67 backend tests and 3 frontend tests pass with 100% success rate.
