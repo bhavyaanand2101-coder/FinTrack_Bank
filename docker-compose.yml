@@ -1,0 +1,172 @@
+services:
+  # ============================================================================
+  # 1. PostgreSQL 16 (Primary ACID Database)
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: fintrack-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: fintrack
+      POSTGRES_USER: fintrack_user
+      POSTGRES_PASSWORD: fintrack_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init_db.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+      - ./database/seed_data.sql:/docker-entrypoint-initdb.d/02_seed.sql:ro
+    ports:
+      - "${PORT_POSTGRES:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fintrack_user -d fintrack"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fintrack-network
+
+  # ============================================================================
+  # 2. MongoDB 7.0 (Append-Only Audit & Security Log Store)
+  # ============================================================================
+  mongodb:
+    image: mongo:7.0
+    container_name: fintrack-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: fintrack_db
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "${PORT_MONGO:-27018}:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fintrack-network
+
+  # ============================================================================
+  # 3. FastAPI Backend (REST API, Banking Engine & SSE Stream)
+  # ============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fintrack-backend
+    restart: unless-stopped
+    environment:
+      POSTGRES_URI: postgresql://fintrack_user:fintrack_password@postgres:5432/fintrack
+      MONGO_URI: mongodb://mongodb:27017/
+      MONGO_DB_NAME: fintrack_db
+      SECRET_KEY: fintrack-production-secure-master-key-2026-sha256-deterministic
+      FRAUD_THRESHOLD: "10000.00"
+      SESSION_TIMEOUT_MINUTES: "30"
+      DB_POOL_MIN: "2"
+      DB_POOL_MAX: "20"
+      LIVE_EXCEL_PATH: /app/data/fintrack_live_data.xlsx
+    volumes:
+      - excel_data:/app/data
+    ports:
+      - "${PORT_BACKEND:-8001}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - fintrack-network
+
+  # ============================================================================
+  # 4. Audit Outbox Daemon (PostgreSQL Outbox -> MongoDB Syncer)
+  # ============================================================================
+  audit-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fintrack-audit-worker
+    restart: unless-stopped
+    command: ["python", "workers/audit_worker.py", "--interval", "3.0"]
+    environment:
+      POSTGRES_URI: postgresql://fintrack_user:fintrack_password@postgres:5432/fintrack
+      MONGO_URI: mongodb://mongodb:27017/
+      MONGO_DB_NAME: fintrack_db
+      SECRET_KEY: fintrack-production-secure-master-key-2026-sha256-deterministic
+    healthcheck:
+      disable: true
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - fintrack-network
+
+  # ============================================================================
+  # 5. Live Excel Auto-Sync Daemon (PostgreSQL -> fintrack_live_data.xlsx)
+  # ============================================================================
+  excel-sync-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fintrack-excel-sync-worker
+    restart: unless-stopped
+    command: ["python", "workers/excel_sync_worker.py", "--interval", "2.0", "--output", "/app/data/fintrack_live_data.xlsx"]
+    environment:
+      POSTGRES_URI: postgresql://fintrack_user:fintrack_password@postgres:5432/fintrack
+      MONGO_URI: mongodb://mongodb:27017/
+      MONGO_DB_NAME: fintrack_db
+      SECRET_KEY: fintrack-production-secure-master-key-2026-sha256-deterministic
+    volumes:
+      - excel_data:/app/data
+    healthcheck:
+      disable: true
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - fintrack-network
+
+  # ============================================================================
+  # 6. React Frontend & Nginx Reverse Proxy
+  # ============================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+    container_name: fintrack-frontend
+    restart: unless-stopped
+    ports:
+      - "${PORT_FRONTEND:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+    networks:
+      - fintrack-network
+
+# ==============================================================================
+# Volumes & Networks
+# ==============================================================================
+volumes:
+  postgres_data:
+    name: fintrack_postgres_data
+  mongo_data:
+    name: fintrack_mongo_data
+  excel_data:
+    name: fintrack_excel_data
+
+networks:
+  fintrack-network:
+    name: fintrack-network
+    driver: bridge
