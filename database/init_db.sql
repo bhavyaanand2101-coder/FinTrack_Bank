@@ -382,3 +382,32 @@ USING (
     OR current_setting('app.current_customer_id', true) = ''
 );
 
+DROP POLICY IF EXISTS p_ledger_isolation ON ledger_entries;
+CREATE POLICY p_ledger_isolation ON ledger_entries
+FOR ALL
+USING (
+    current_setting('app.current_user_role', true) = 'ADMIN'
+    OR account_id IN (
+        SELECT account_id FROM accounts 
+        WHERE customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+    )
+    OR current_setting('app.current_user_role', true) = 'SYSTEM'
+    OR current_setting('app.current_customer_id', true) IS NULL
+    OR current_setting('app.current_customer_id', true) = ''
+);
+
+DROP POLICY IF EXISTS p_fraud_alerts_isolation ON fraud_alerts;
+CREATE POLICY p_fraud_alerts_isolation ON fraud_alerts
+FOR ALL
+USING (
+    current_setting('app.current_user_role', true) = 'ADMIN'
+    OR account_id IN (
+        SELECT account_id FROM accounts 
+        WHERE customer_id = NULLIF(current_setting('app.current_customer_id', true), '')::integer
+    )
+    OR current_setting('app.current_user_role', true) = 'SYSTEM'
+    OR current_setting('app.current_customer_id', true) IS NULL
+    OR current_setting('app.current_customer_id', true) = ''
+);
+
+
