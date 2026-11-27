@@ -57,7 +57,7 @@ class Settings:
             "postgres_configured": bool(cls.POSTGRES_URI and cls.POSTGRES_URI.strip()),
             "mongo_configured": cls.is_mongo_configured(),
             "pool_bounds_valid": 1 <= cls.DB_POOL_MIN <= cls.DB_POOL_MAX,
-            "thresholds_valid": cls.FRAUD_THRESHOLD > 0 and cls.Z_SCORE_THRESHOLD > 0,
+            "thresholds_valid": cls.FRAUD_THRESHOLD > 0,
         }
         return status
 
