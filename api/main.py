@@ -3,6 +3,9 @@ FinTrack - FastAPI Main Application Entrypoint
 File: api/main.py
 """
 
+from contextlib import asynccontextmanager
+import logging
+from pathlib import Path
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -18,6 +21,39 @@ from api.routes.transfers import router as transfers_router
 from database_layer.db import check_postgres_health
 from database_layer.mongodb import check_mongo_health
 
+logger = logging.getLogger("fintrack.api")
+
+
+def ensure_database_initialized():
+    """If connected to PostgreSQL and tables do not exist, run init_db.sql and seed_data.sql."""
+    try:
+        from database_layer.db import get_db_connection
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'users');")
+                row = cur.fetchone()
+                if not row or not row[0]:
+                    logger.info("Fresh database detected. Initializing schema and default seed data...")
+                    init_sql = Path(__file__).resolve().parent.parent / "database" / "init_db.sql"
+                    seed_sql = Path(__file__).resolve().parent.parent / "database" / "seed_data.sql"
+                    if init_sql.exists():
+                        cur.execute(init_sql.read_text(encoding="utf-8"))
+                        conn.commit()
+                    if seed_sql.exists():
+                        cur.execute(seed_sql.read_text(encoding="utf-8"))
+                        conn.commit()
+                    logger.info("FinTrack database schema and seed data initialized successfully!")
+    except Exception as exc:
+        logger.warning("Database auto-initialization check skipped: %s", exc)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if check_postgres_health():
+        ensure_database_initialized()
+    yield
+
+
 app = FastAPI(
     title="FinTrack Banking System API",
     version="2.0.0",
@@ -25,6 +61,7 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_url="/api/openapi.json",
+    lifespan=lifespan,
 )
 
 # Flexible localhost and production CORS configuration
@@ -55,6 +92,8 @@ app.add_middleware(
 def health_check():
     """System connectivity and health status."""
     pg_ok = check_postgres_health()
+    if pg_ok:
+        ensure_database_initialized()
     mongo_ok = check_mongo_health()
     return {
         "status": "healthy" if pg_ok else "degraded",
