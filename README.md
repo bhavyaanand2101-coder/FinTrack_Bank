@@ -1,6 +1,6 @@
 # FinTrack – Smart Digital Banking & Loan Management System
 
-FinTrack is an enterprise-grade banking and loan management full-stack Database Management System (DBMS) built with **React (Vite + Tailwind CSS)**, **Python FastAPI**, **PostgreSQL 16**, and **MongoDB NoSQL**.
+FinTrack is an enterprise-grade banking and loan management full-stack Database Management System (DBMS) built with **React (Vite + Tailwind CSS)**, **Python FastAPI**, **PostgreSQL 16**, and **MongoDB NoSQL .... 
 
 The system demonstrates advanced relational database engineering, ACID transactions, double-entry bookkeeping, deadlock prevention via deterministic lock ordering, deterministic fixed-rule fraud holds, and the **Transactional Outbox Pattern** for asynchronous NoSQL security audit log delivery.
 
