@@ -1,0 +1,44 @@
+# ==============================================================================
+# FinTrack — Render Infrastructure-as-Code Blueprint Specification
+# ==============================================================================
+
+services:
+  # FinTrack Web Service (FastAPI Backend + React Frontend + Workers)
+  - type: web
+    name: fintrack-bank
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: POSTGRES_URI
+        fromDatabase:
+          name: fintrack-postgres
+          property: connectionString
+      - key: MONGO_URI
+        sync: false # Set your MongoDB Atlas URI in Render dashboard
+      - key: MONGO_DB_NAME
+        value: fintrack_db
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FRAUD_THRESHOLD
+        value: "10000.00"
+      - key: SESSION_TIMEOUT_MINUTES
+        value: "30"
+      - key: DB_POOL_MIN
+        value: "1"
+      - key: DB_POOL_MAX
+        value: "10"
+      - key: DB_TIMEOUT_SECONDS
+        value: "10"
+      - key: LIVE_EXCEL_PATH
+        value: /app/data/fintrack_live_data.xlsx
+
+databases:
+  # Managed PostgreSQL 16 ACID Database
+  - name: fintrack-postgres
+    databaseName: fintrack
+    user: fintrack_user
+    plan: free
+    region: oregon
