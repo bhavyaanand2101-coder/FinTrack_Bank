@@ -1,10 +1,26 @@
 # ==============================================================================
-# FinTrack — Production Backend & Workers Dockerfile
-# Multi-stage build for minimal attack surface and small image size
+# FinTrack — Production Full-Stack Container (React SPA + FastAPI Backend)
+# Multi-stage build for minimal attack surface, optimal caching, and small image size
 # ==============================================================================
 
-# Stage 1: Build Dependencies
-FROM python:3.12-slim AS builder
+# ------------------------------------------------------------------------------
+# Stage 1: Build React 18 + Vite Frontend
+# ------------------------------------------------------------------------------
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+COPY frontend/package*.json ./
+RUN npm ci
+
+COPY frontend/ ./
+ENV VITE_API_URL=/api
+RUN npm run build
+
+# ------------------------------------------------------------------------------
+# Stage 2: Build Python Dependencies & Wheels
+# ------------------------------------------------------------------------------
+FROM python:3.12-slim AS backend-builder
 
 WORKDIR /build
 
@@ -14,9 +30,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --no-warn-script-location --user -r requirements.txt
 
-# Stage 2: Final Minimal Runtime
+# ------------------------------------------------------------------------------
+# Stage 3: Final Production Runtime Image
+# ------------------------------------------------------------------------------
 FROM python:3.12-slim AS runner
 
 WORKDIR /app
@@ -30,16 +48,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Create non-root system user
 RUN groupadd -r fintrack && useradd -r -g fintrack -d /home/fintrack -m -s /bin/bash fintrack
 
-# Copy installed Python packages from builder
-COPY --from=builder /root/.local /home/fintrack/.local
+# Copy installed Python packages from backend-builder
+COPY --from=backend-builder /root/.local /home/fintrack/.local
 
 ENV PATH="/home/fintrack/.local/bin:${PATH}" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH="/app"
 
-# Copy application source code
+# Copy application backend source code
 COPY --chown=fintrack:fintrack . /app
+
+# Copy compiled React frontend distribution from frontend-builder
+COPY --from=frontend-builder --chown=fintrack:fintrack /app/frontend/dist /app/frontend/dist
 
 # Ensure live Excel workbook directory exists with full write permissions
 RUN mkdir -p /app/data && chown -R fintrack:fintrack /app/data

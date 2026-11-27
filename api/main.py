@@ -78,6 +78,51 @@ app.include_router(audit_router)
 app.include_router(live_sheet_router)
 
 
+@app.get("/docs", include_in_schema=False)
+def docs_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/api/docs")
+
+
+# Serve React Frontend SPA if dist exists
+from pathlib import Path
+FRONTEND_DIST = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+if FRONTEND_DIST.exists():
+    from fastapi.staticfiles import StaticFiles
+    from fastapi.responses import FileResponse
+
+    if (FRONTEND_DIST / "assets").exists():
+        app.mount("/assets", StaticFiles(directory=str(FRONTEND_DIST / "assets")), name="assets")
+
+    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+    async def serve_root():
+        index_file = FRONTEND_DIST / "index.html"
+        if index_file.exists():
+            return FileResponse(index_file)
+        return {"status": "online", "message": "FinTrack Banking System API"}
+
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+    async def serve_spa(full_path: str):
+        # Don't intercept API or Swagger routes
+        if full_path.startswith("api") or full_path.startswith("openapi.json"):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        target_file = FRONTEND_DIST / full_path
+        if target_file.is_file():
+            return FileResponse(target_file)
+        return FileResponse(FRONTEND_DIST / "index.html")
+else:
+    @app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+    def api_root():
+        return {
+            "status": "online",
+            "message": "FinTrack Banking System API is running.",
+            "docs_url": "/api/docs",
+            "health_url": "/api/health"
+        }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)
