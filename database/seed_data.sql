@@ -4,10 +4,10 @@
 -- File: database/seed_data.sql
 -- ============================================================================
 
--- 1. Insert Administrator
+-- 1. Insert Administrator (Password: Admin123!)
 INSERT INTO users (customer_id, username, password_hash, role, is_active)
 VALUES 
-(NULL, 'admin', '$argon2id$v=19$m=65536,t=3,p=4$RRoKwUxotAh3JYTdtiFG5w$VzsdwKdf6VhzEE6997VJTMa6ZFpi4x8OXWVceFN7Ogs', 'ADMIN', TRUE);
+(NULL, 'admin', '$argon2id$v=19$m=65536,t=3,p=4$ZYvMgM4rbggunrBRzwToyA$mxMlBusR9sstHskjsf16od+xePimoKSCTw/2/6W5xqE', 'ADMIN', TRUE);
 
 -- 2. Insert 10 Synthetic Customers
 INSERT INTO customers (customer_id, full_name, email, phone) VALUES
